@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>TOTAX Cloud Admin</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root{color-scheme:dark;--bg:#0b1020;--panel:#121a2d;--line:#26334d;--muted:#9aabc5;--txt:#edf3ff;--blue:#6ea8fe;--red:#ff7474;--green:#55d6a0}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--txt);font:15px system-ui,-apple-system,Segoe UI,sans-serif}
+header{padding:18px 20px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:12px;position:sticky;top:0;background:#0b1020;z-index:2}
+h1{font-size:19px;margin:0}small,.muted{color:var(--muted)}main{max-width:1100px;margin:auto;padding:20px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:16px}
+input,button,select{font:inherit;border-radius:9px;padding:11px 12px;border:1px solid var(--line);background:#0c1426;color:var(--txt);width:100%;margin:5px 0}
+button{background:#244a83;border:0;font-weight:650;cursor:pointer}button.secondary{background:#26334d}button.danger{background:#873c49}button:disabled{opacity:.5}
+.row{display:flex;gap:10px;flex-wrap:wrap}.row>*{flex:1;min-width:130px}.tabs{display:flex;gap:7px;overflow:auto;margin-bottom:14px}.tabs button{width:auto;white-space:nowrap;padding:9px 13px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:10px}.stat strong{display:block;font-size:25px;margin-top:7px}
+table{width:100%;border-collapse:collapse;font-size:13px;min-width:620px}th,td{text-align:left;padding:10px;border-bottom:1px solid var(--line);vertical-align:top}th{color:var(--muted)}
+.tablewrap{overflow:auto}pre{white-space:pre-wrap;word-break:break-all;background:#080d18;padding:12px;border-radius:8px}
+#app{display:none}.notice{padding:11px;border-radius:9px;background:#182a42;color:#cfe2ff;margin:10px 0}.error{color:#ff9b9b}.success{color:#7de0b5}.hidden{display:none}
+</style>
+</head>
+<body>
+<header><div><h1>TOTAX <span style="color:var(--blue)">CLOUD ADMIN</span></h1><small>Owner console · Secure browser session</small></div><button id="logout" class="secondary" style="display:none;width:auto">Sign out</button></header>
+<main>
+<section id="config" class="card">
+<h2>Connect your Supabase project</h2>
+<p class="muted">Enter the project URL and publishable key. These are client-side credentials; never enter a secret/service-role key here.</p>
+<input id="projectUrl" value="https://vovwocepwwzchzbilhww.supabase.co" placeholder="Project URL">
+<input id="pubKey" placeholder="sb_publishable_...">
+<button id="connect">Connect</button>
+<div id="configMsg" class="muted"></div>
+</section>
+<section id="login" class="card hidden">
+<h2>Owner sign in</h2><input id="email" type="email" autocomplete="username" placeholder="Owner email">
+<input id="password" type="password" autocomplete="current-password" placeholder="Password">
+<button id="signIn">Sign in</button><div id="loginMsg" class="muted"></div>
+</section>
+<section id="app">
+<div class="notice">Signed in as <b id="who"></b>. Admin access is checked against your <code>totax_profiles.role</code> row and enforced by database RLS.</div>
+<div class="tabs">
+<button data-tab="overview">Overview</button><button data-tab="users">Users</button><button data-tab="devices">Devices</button><button data-tab="licenses">Licenses</button><button data-tab="logs">Activity</button>
+</div>
+<div id="overview" class="pane">
+<div class="stats">
+<div class="card stat">Profiles<strong id="sUsers">—</strong></div><div class="card stat">Devices<strong id="sDevices">—</strong></div><div class="card stat">Licenses<strong id="sLicenses">—</strong></div><div class="card stat">Activity events<strong id="sLogs">—</strong></div>
+</div><div class="card"><button id="refresh">Refresh dashboard</button><p class="muted">Counts reflect rows accessible to your admin account.</p></div>
+</div>
+<div id="users" class="pane hidden card"><h2>Users / profiles</h2><div class="tablewrap"><table><thead><tr><th>User ID</th><th>Name</th><th>Role</th><th>Created</th></tr></thead><tbody id="usersBody"></tbody></table></div><p class="muted">This view lists app profiles, not full authentication credentials. Never expose passwords or auth tokens.</p></div>
+<div id="devices" class="pane hidden card"><h2>Registered devices</h2><div class="tablewrap"><table><thead><tr><th>Device</th><th>User ID</th><th>Status</th><th>Last seen</th><th>Action</th></tr></thead><tbody id="devicesBody"></tbody></table></div></div>
+<div id="licenses" class="pane hidden">
+<div class="card"><h2>Create license</h2><p class="muted">Leave User ID empty for an unassigned license. The generated key is shown once; only its SHA-256 hash is stored.</p><input id="licenseUser" placeholder="Optional user UUID">
+<div class="row"><input id="maxDevices" type="number" min="1" max="20" value="1" placeholder="Max devices"><input id="expiryDays" type="number" min="1" max="3650" value="30" placeholder="Validity in days"></div>
+<button id="createLicense">Generate and save license</button><div id="newLicense" class="hidden notice"></div></div>
+<div class="card"><h2>Licenses</h2><div class="tablewrap"><table><thead><tr><th>License ID</th><th>User ID</th><th>Status</th><th>Expires</th><th>Action</th></tr></thead><tbody id="licensesBody"></tbody></table></div></div>
+</div>
+<div id="logs" class="pane hidden card"><h2>Recent activity</h2><div class="tablewrap"><table><thead><tr><th>Time</th><th>User ID</th><th>Event</th><th>Details</th></tr></thead><tbody id="logsBody"></tbody></table></div></div>
+<div id="appMsg" class="muted"></div>
+</section>
+</main>
+<script>
+let sb=null, currentUser=null;
+const $=id=>document.getElementById(id);
+const msg=(id,t,cls='muted')=>{$(id).className=cls;$(id).textContent=t};
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+$('connect').onclick=async()=>{
+ const url=$('projectUrl').value.trim(), key=$('pubKey').value.trim();
+ if(!url.startsWith('https://')||!key.startsWith('sb_publishable_'))return msg('configMsg','Enter the correct project URL and sb_publishable_ key.','error');
+ sb=window.supabase.createClient(url,key);
+ $('config').classList.add('hidden');$('login').classList.remove('hidden');
+ msg('loginMsg','Connected. Sign in with the owner account you created in Supabase Authentication.');
+};
+$('signIn').onclick=async()=>{
+ msg('loginMsg','Signing in…');
+ const {data,error}=await sb.auth.signInWithPassword({email:$('email').value.trim(),password:$('password').value});
+ if(error)return msg('loginMsg',error.message,'error');
+ currentUser=data.user; $('password').value='';
+ const {data:p,error:e}=await sb.from('totax_profiles').select('role,display_name').eq('id',currentUser.id).maybeSingle();
+ if(e||!p||p.role!=='admin'){await sb.auth.signOut();return msg('loginMsg','This account is not an admin. Verify totax_profiles.role = admin.','error')}
+ $('login').classList.add('hidden');$('app').style.display='block';$('logout').style.display='block';$('who').textContent=currentUser.email;
+ await loadAll();
+};
+$('logout').onclick=async()=>{await sb.auth.signOut();location.reload()};
+document.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>{document.querySelectorAll('.pane').forEach(p=>p.classList.add('hidden'));$(b.dataset.tab).classList.remove('hidden')});
+async function rows(table,select='*',limit=100){const {data,error}=await sb.from(table).select(select).order('created_at',{ascending:false}).limit(limit);if(error)throw error;return data||[]}
+function tableRows(id,arr,fn){$(id).innerHTML=arr.map(fn).join('')||'<tr><td colspan="8">No records found</td></tr>'}
+async function loadAll(){
+ try{
+ const [profiles,devices,licenses,logs]=await Promise.all([rows('totax_profiles'),rows('totax_devices'),rows('totax_licenses'),rows('totax_activity_logs')]);
+ $('sUsers').textContent=profiles.length;$('sDevices').textContent=devices.length;$('sLicenses').textContent=licenses.length;$('sLogs').textContent=logs.length;
+ tableRows('usersBody',profiles,p=>`<tr><td>${esc(p.id)}</td><td>${esc(p.display_name||'—')}</td><td>${esc(p.role)}</td><td>${esc(p.created_at)}</td></tr>`);
+ tableRows('devicesBody',devices,d=>`<tr><td>${esc(d.device_name)}<br><small>${esc(d.id)}</small></td><td>${esc(d.user_id)}</td><td>${esc(d.status)}</td><td>${esc(d.last_seen_at||'—')}</td><td>${d.status==='active'?`<button class="danger" onclick="setDevice('${d.id}','suspended')">Suspend</button>`:`<button onclick="setDevice('${d.id}','active')">Activate</button>`}</td></tr>`);
+ tableRows('licensesBody',licenses,l=>`<tr><td>${esc(l.id)}</td><td>${esc(l.user_id||'Unassigned')}</td><td>${esc(l.status)}</td><td>${esc(l.expires_at||'Never')}</td><td>${l.status==='active'?`<button class="danger" onclick="setLicense('${l.id}','revoked')">Revoke</button>`:'—'}</td></tr>`);
+ tableRows('logsBody',logs,p=>`<tr><td>${esc(p.created_at)}</td><td>${esc(p.user_id)}</td><td>${esc(p.event_type)}</td><td><pre>${esc(JSON.stringify(p.details))}</pre></td></tr>`);
+ msg('appMsg','Dashboard updated.','success');
+ }catch(e){msg('appMsg','Could not load data: '+e.message,'error')}
+}
+window.setDevice=async(id,status)=>{const {error}=await sb.from('totax_devices').update({status}).eq('id',id);if(error)msg('appMsg',error.message,'error');else await loadAll()};
+window.setLicense=async(id,status)=>{const {error}=await sb.from('totax_licenses').update({status}).eq('id',id);if(error)msg('appMsg',error.message,'error');else await loadAll()};
+$('refresh').onclick=loadAll;
+$('createLicense').onclick=async()=>{
+ try{
+ const raw='TOTAX-'+Array.from(crypto.getRandomValues(new Uint8Array(18))).map(x=>x.toString(16).padStart(2,'0')).join('').toUpperCase();
+ const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(raw));
+ const hash=Array.from(new Uint8Array(digest)).map(x=>x.toString(16).padStart(2,'0')).join('');
+ const days=Math.max(1,Math.min(3650,Number($('expiryDays').value)||30));
+ const max=Math.max(1,Math.min(20,Number($('maxDevices').value)||1));
+ const user=$('licenseUser').value.trim()||null;
+ const {error}=await sb.from('totax_licenses').insert({user_id:user,license_key_hash:hash,max_devices:max,expires_at:new Date(Date.now()+days*86400000).toISOString(),status:'active'});
+ if(error)throw error;
+ $('newLicense').classList.remove('hidden');$('newLicense').innerHTML='<b>Copy this license now. It will not be shown again:</b><pre>'+esc(raw)+'</pre><button id="copyLicense">Copy license</button>';
+ $('copyLicense').onclick=()=>navigator.clipboard.writeText(raw);
+ await loadAll();
+ }catch(e){msg('appMsg','License creation failed: '+e.message,'error')}
+};
+</script>
+</body></html>
